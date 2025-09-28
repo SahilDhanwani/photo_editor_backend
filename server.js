@@ -37,7 +37,7 @@ app.options('*', cors());
 // Multer setup with file size limit (adjust as needed)
 const upload = multer({
     dest: 'uploads/',
-    limits: { fileSize: 10 * 1024 * 1024 } // 10 MB max
+    limits: { fileSize: 10 * 10 * 1024 * 1024 } // 100 MB max
 });
 
 app.post('/api/generate', upload.single('photo'), async (req, res) => {
