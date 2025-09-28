@@ -11,30 +11,14 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-// Allowed origins
-const allowedOrigins = ['https://chat-zone.tech', 'https://www.chat-zone.tech'];
-
-// CORS middleware
 app.use(cors({
-    origin: function (origin, callback) {
-        // Allow requests with no origin (like mobile apps or curl)
-        if (!origin) return callback(null, true);
-        if (allowedOrigins.includes(origin)) {
-            callback(null, true);
-        } else {
-            callback(new Error('Not allowed by CORS'));
-        }
-    },
-    methods: ['GET', 'POST', 'OPTIONS'],
-    credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization']
+    origin: 'https://chat-zone.tech'
 }));
 
-// Handle preflight OPTIONS requests
-app.options('*', cors());
-
-
-const upload = multer({ dest: 'uploads/' });
+const upload = multer({
+    dest: 'uploads/',
+    limits: { fileSize: 10 * 1024 * 1024 * 4 } // 40 MB limit
+});
 
 app.post('/api/generate', upload.single('photo'), async (req, res) => {
     try {
