@@ -12,9 +12,9 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 app.use(cors({
-  origin: ['https://chat-zone.tech', 'https://www.chat-zone.tech'], 
-  methods: ['GET','POST'],
-  credentials: true
+    origin: ['https://chat-zone.tech', 'https://www.chat-zone.tech', "https://api.chat-zone.tech"],
+    methods: ['GET', 'POST'],
+    credentials: true
 }));
 
 const upload = multer({ dest: 'uploads/' });
