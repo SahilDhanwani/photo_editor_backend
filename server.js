@@ -1,6 +1,5 @@
 // server.js
 import express from 'express';
-import cors from 'cors';
 import multer from 'multer';
 import sharp from 'sharp';
 import path from 'path';
@@ -12,45 +11,48 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
-// Allowed origins
+// Allowed frontend origins
 const allowedOrigins = ['https://chat-zone.tech', 'https://www.chat-zone.tech'];
 
-// CORS middleware (dynamic origin)
-app.use(cors({
-    origin: function (origin, callback) {
-        // allow requests with no origin (like mobile apps or curl)
-        if (!origin) return callback(null, true);
-        if (allowedOrigins.includes(origin)) {
-            callback(null, true);
-        } else {
-            callback(new Error('Not allowed by CORS'));
-        }
-    },
-    methods: ['GET', 'POST', 'OPTIONS'],
-    credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization']
-}));
+// -------------------------------
+// CORS Middleware (preflight safe)
+// -------------------------------
+app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    if (allowedOrigins.includes(origin)) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+    }
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
 
-// Handle preflight OPTIONS requests
-app.options('*', cors());
-
-// Multer setup with file size limit (adjust as needed)
-const upload = multer({
-    dest: 'uploads/',
-    limits: { fileSize: 10 * 10 * 1024 * 1024 } // 100 MB max
+    // Handle preflight OPTIONS requests
+    if (req.method === 'OPTIONS') return res.sendStatus(200);
+    next();
 });
 
+// -------------------------------
+// Multer Setup
+// -------------------------------
+const upload = multer({
+    dest: 'uploads/',
+    limits: { fileSize: 20 * 1024 * 1024 } // 20 MB max, adjust as needed
+});
+
+// -------------------------------
+// POST /api/generate
+// -------------------------------
 app.post('/api/generate', upload.single('photo'), async (req, res) => {
     try {
         const { text, pos } = req.body;
         const filePath = req.file.path;
 
-        // Load original image
+        // Load image
         const image = sharp(filePath);
         const meta = await image.metadata();
         const stripHeight = 120;
 
-        // Create SVG text overlay
+        // SVG text overlay
         const svg = `
       <svg width="${meta.width}" height="${stripHeight}">
         <rect x="0" y="0" width="${meta.width}" height="${stripHeight}" fill="white"/>
@@ -86,7 +88,7 @@ app.post('/api/generate', upload.single('photo'), async (req, res) => {
                 .toBuffer();
         }
 
-        // Clean up temp file
+        // Delete temp file
         fs.unlink(filePath, () => { });
 
         res.setHeader('Content-Type', 'image/jpeg');
@@ -98,9 +100,15 @@ app.post('/api/generate', upload.single('photo'), async (req, res) => {
     }
 });
 
-// Global error handler (ensures CORS headers even on errors)
+// -------------------------------
+// Global Error Handler
+// -------------------------------
 app.use((err, req, res, next) => {
-    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+    // Ensure CORS headers are always sent
+    const origin = req.headers.origin;
+    if (allowedOrigins.includes(origin)) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+    }
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
@@ -108,8 +116,12 @@ app.use((err, req, res, next) => {
     if (err.code === 'LIMIT_FILE_SIZE') {
         return res.status(413).send('File too large');
     }
+
     res.status(500).send('Server error');
 });
 
+// -------------------------------
+// Start server
+// -------------------------------
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Chat-Zone backend running on port ${PORT}`));
