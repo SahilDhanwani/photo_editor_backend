@@ -124,4 +124,4 @@ app.use((err, req, res, next) => {
 // Start server
 // -------------------------------
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`✅ Chat-Zone backend running on port ${PORT}`));
+app.listen(PORT, () => console.log(`✅ Photo Editor backend running on port ${PORT}`));
