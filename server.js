@@ -11,28 +11,46 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+
+// Allowed origins
+const allowedOrigins = ['https://chat-zone.tech', 'https://www.chat-zone.tech'];
+
+// CORS middleware (dynamic origin)
 app.use(cors({
-    origin: 'https://chat-zone.tech'
+    origin: function (origin, callback) {
+        // allow requests with no origin (like mobile apps or curl)
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    methods: ['GET', 'POST', 'OPTIONS'],
+    credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
+// Handle preflight OPTIONS requests
+app.options('*', cors());
+
+// Multer setup with file size limit (adjust as needed)
 const upload = multer({
     dest: 'uploads/',
-    limits: { fileSize: 10 * 1024 * 1024 * 4 } // 40 MB limit
+    limits: { fileSize: 10 * 1024 * 1024 } // 10 MB max
 });
 
 app.post('/api/generate', upload.single('photo'), async (req, res) => {
     try {
-        const { text, pos } = req.body; // pos is 'below' but we keep it for future
+        const { text, pos } = req.body;
         const filePath = req.file.path;
 
-        // Load the original image
+        // Load original image
         const image = sharp(filePath);
         const meta = await image.metadata();
-
-        // White strip height (adjust as needed)
         const stripHeight = 120;
 
-        // Create a white strip with text
+        // Create SVG text overlay
         const svg = `
       <svg width="${meta.width}" height="${stripHeight}">
         <rect x="0" y="0" width="${meta.width}" height="${stripHeight}" fill="white"/>
@@ -42,13 +60,11 @@ app.post('/api/generate', upload.single('photo'), async (req, res) => {
         </text>
       </svg>
     `;
-
         const svgBuffer = Buffer.from(svg);
 
+        // Compose final image
         let finalImage;
-
         if (pos === 'above') {
-            // Optional future use
             finalImage = await sharp({
                 create: { width: meta.width, height: meta.height + stripHeight, channels: 4, background: 'white' }
             })
@@ -59,7 +75,6 @@ app.post('/api/generate', upload.single('photo'), async (req, res) => {
                 .jpeg()
                 .toBuffer();
         } else {
-            // Default: text below image
             finalImage = await sharp({
                 create: { width: meta.width, height: meta.height + stripHeight, channels: 4, background: 'white' }
             })
@@ -76,11 +91,25 @@ app.post('/api/generate', upload.single('photo'), async (req, res) => {
 
         res.setHeader('Content-Type', 'image/jpeg');
         res.send(finalImage);
+
     } catch (err) {
         console.error(err);
         res.status(500).send('Server error');
     }
 });
 
+// Global error handler (ensures CORS headers even on errors)
+app.use((err, req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+
+    if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).send('File too large');
+    }
+    res.status(500).send('Server error');
+});
+
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`✅ Sai Fashions backend running on port ${PORT}`));
+app.listen(PORT, () => console.log(`✅ Chat-Zone backend running on port ${PORT}`));
