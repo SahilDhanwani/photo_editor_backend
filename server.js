@@ -11,11 +11,28 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+// Allowed origins
+const allowedOrigins = ['https://chat-zone.tech', 'https://www.chat-zone.tech'];
+
+// CORS middleware
 app.use(cors({
-    origin: ['https://chat-zone.tech', 'https://www.chat-zone.tech', "https://api.chat-zone.tech"],
-    methods: ['GET', 'POST'],
-    credentials: true
+    origin: function (origin, callback) {
+        // Allow requests with no origin (like mobile apps or curl)
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    methods: ['GET', 'POST', 'OPTIONS'],
+    credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
+// Handle preflight OPTIONS requests
+app.options('*', cors());
+
 
 const upload = multer({ dest: 'uploads/' });
 
