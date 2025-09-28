@@ -36,7 +36,7 @@ app.use((req, res, next) => {
 // -------------------------------
 const upload = multer({
     dest: 'uploads/',
-    limits: { fileSize: 20 * 1024 * 1024 } // 20 MB max, adjust as needed
+    limits: { fileSize: 100 * 1024 * 1024 } // 100 MB max, adjust as needed
 });
 
 // -------------------------------
@@ -124,4 +124,4 @@ app.use((err, req, res, next) => {
 // Start server
 // -------------------------------
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`✅ Photo Editor backend running on port ${PORT}`));
+app.listen(PORT, () => console.log(`✅ Photo Editor V.4.4 backend running on port ${PORT}`));
