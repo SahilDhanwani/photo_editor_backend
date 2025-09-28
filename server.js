@@ -15,8 +15,10 @@ app.use(cors({
     origin: 'https://chat-zone.tech'
 }));
 
-const upload = multer({ dest: 'uploads/' });
-
+const upload = multer({
+    dest: 'uploads/',
+    limits: { fileSize: 50 * 1024 * 1024 } // 50 MB max, adjust as needed
+});
 app.post('/api/generate', upload.single('photo'), async (req, res) => {
     try {
         const { text, pos } = req.body; // pos is 'below' but we keep it for future
