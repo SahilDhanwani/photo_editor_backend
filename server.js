@@ -1,4 +1,3 @@
-// server.js
 import express from 'express';
 import multer from 'multer';
 import sharp from 'sharp';
@@ -10,13 +9,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+const allowedOrigins = ['https://chat-zone.tech', 'https://www.chat-zone.tech', 'http://localhost:4200'];
 
-// Allowed frontend origins
-const allowedOrigins = ['https://chat-zone.tech', 'https://www.chat-zone.tech'];
-
-// -------------------------------
-// CORS Middleware (preflight safe)
-// -------------------------------
 app.use((req, res, next) => {
     const origin = req.headers.origin;
     if (allowedOrigins.includes(origin)) {
@@ -25,74 +19,76 @@ app.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
-
-    // Handle preflight OPTIONS requests
     if (req.method === 'OPTIONS') return res.sendStatus(200);
     next();
 });
 
-// -------------------------------
-// Multer Setup
-// -------------------------------
 const upload = multer({
     dest: 'uploads/',
-    limits: { fileSize: 50 * 1024 * 1024 } // 50 MB max, adjust as needed
+    limits: { fileSize: 50 * 1024 * 1024 }
 });
 
-// -------------------------------
-// POST /api/generate
-// -------------------------------
 app.post('/api/generate', upload.single('photo'), async (req, res) => {
     try {
-        const { text, pos } = req.body;
+        const { text, desc } = req.body;
         const filePath = req.file.path;
 
-        // Load image
         const image = sharp(filePath);
         const meta = await image.metadata();
-        const stripHeight = 120;
 
-        // SVG text overlay
-        const svg = `
-      <svg width="${meta.width}" height="${stripHeight}">
-        <rect x="0" y="0" width="${meta.width}" height="${stripHeight}" fill="white"/>
-        <text x="50%" y="50%" font-size="42" text-anchor="middle"
-              dominant-baseline="middle" fill="black" font-family="Arial, sans-serif">
-          ${text}
-        </text>
-      </svg>
-    `;
-        const svgBuffer = Buffer.from(svg);
-
-        // Compose final image
-        let finalImage;
-        if (pos === 'above') {
-            finalImage = await sharp({
-                create: { width: meta.width, height: meta.height + stripHeight, channels: 4, background: 'white' }
-            })
-                .composite([
-                    { input: svgBuffer, top: 0, left: 0 },
-                    { input: filePath, top: stripHeight, left: 0 }
-                ])
-                .jpeg()
-                .toBuffer();
-        } else {
-            finalImage = await sharp({
-                create: { width: meta.width, height: meta.height + stripHeight, channels: 4, background: 'white' }
-            })
-                .composite([
-                    { input: filePath, top: 0, left: 0 },
-                    { input: svgBuffer, top: meta.height, left: 0 }
-                ])
-                .jpeg()
-                .toBuffer();
+        // -------------------
+        // TOP STRIP (desc)
+        // -------------------
+        let topStripHeight = 0;
+        let topSvgBuffer = null;
+        if (desc && desc.trim() !== '') {
+            const topFontSize = Math.round(meta.width * 0.1); // 10% of image width
+            topStripHeight = topFontSize + 20; // 10px padding above & below
+            const topSvg = `
+            <svg width="${meta.width}" height="${topStripHeight}">
+                <rect x="0" y="0" width="${meta.width}" height="${topStripHeight}" fill="white"/>
+                <text x="50%" y="50%" font-size="${topFontSize}" text-anchor="middle"
+                      dominant-baseline="middle" fill="black" font-family="Arial, sans-serif">
+                  ${desc}
+                </text>
+            </svg>`;
+            topSvgBuffer = Buffer.from(topSvg);
         }
 
-        // Delete temp file
+        // -------------------
+        // BOTTOM STRIP (size + price)
+        // -------------------
+        const bottomFontSize = Math.round(meta.width * 0.098);
+        const bottomStripHeight = bottomFontSize + 20; // 10px padding above & below
+        const bottomSvg = `
+        <svg width="${meta.width}" height="${bottomStripHeight}">
+            <rect x="0" y="0" width="${meta.width}" height="${bottomStripHeight}" fill="white"/>
+            <text x="50%" y="50%" font-size="${bottomFontSize}" text-anchor="middle"
+                  dominant-baseline="middle" fill="black" font-family="Arial, sans-serif">
+              ${text}
+            </text>
+        </svg>`;
+        const bottomSvgBuffer = Buffer.from(bottomSvg);
+
+        // -------------------
+        // Compose final image
+        // -------------------
+        const finalHeight = topStripHeight + meta.height + bottomStripHeight;
+        const compositeArray = [];
+
+        if (topSvgBuffer) compositeArray.push({ input: topSvgBuffer, top: 0, left: 0 });
+        compositeArray.push({ input: filePath, top: topStripHeight, left: 0 });
+        compositeArray.push({ input: bottomSvgBuffer, top: topStripHeight + meta.height, left: 0 });
+
+        const finalImage = await sharp({
+            create: { width: meta.width, height: finalHeight, channels: 4, background: 'white' }
+        }).composite(compositeArray).jpeg().toBuffer();
+
         fs.unlink(filePath, () => { });
 
         res.setHeader('Content-Type', 'image/jpeg');
         res.send(finalImage);
+        console.log('✅ Photo generated. Top strip:', topStripHeight, 'Bottom strip:', bottomStripHeight);
 
     } catch (err) {
         console.error(err);
@@ -100,11 +96,7 @@ app.post('/api/generate', upload.single('photo'), async (req, res) => {
     }
 });
 
-// -------------------------------
-// Global Error Handler
-// -------------------------------
 app.use((err, req, res, next) => {
-    // Ensure CORS headers are always sent
     const origin = req.headers.origin;
     if (allowedOrigins.includes(origin)) {
         res.setHeader('Access-Control-Allow-Origin', origin);
@@ -113,15 +105,9 @@ app.use((err, req, res, next) => {
     res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
 
-    if (err.code === 'LIMIT_FILE_SIZE') {
-        return res.status(413).send('File too large');
-    }
-
+    if (err.code === 'LIMIT_FILE_SIZE') return res.status(413).send('File too large');
     res.status(500).send('Server error');
 });
 
-// -------------------------------
-// Start server
-// -------------------------------
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`✅ Photo Editor V.4.4 backend running on port ${PORT}`));
+app.listen(PORT, () => console.log(`✅ Photo Editor V.4.6 backend running on port ${PORT}`));
